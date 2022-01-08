@@ -11,7 +11,7 @@ public protocol Table {
      */
     enum DMLDeterminer {
         case select(columns: [String]? = nil, from: Table)
-        case update(from: Table)
+        case update(from: Table, set: [String])
         case delete(from: Table)
     }
 
@@ -67,8 +67,8 @@ extension Query.DMLDeterminer {
         case let Query.DMLDeterminer.select(columns, from):
             let unwrappedColumns: [String] = columns ?? ["*"]
             return "SELECT \(unwrappedColumns.joined(separator: ", ")) FROM \(from.tableName)"
-        case let Query.DMLDeterminer.update(from):
-            return "UPDATE FROM \(from.tableName)"
+        case let Query.DMLDeterminer.update(from, set):
+            return "UPDATE FROM \(from.tableName) SET \(set.joined(separator: ", "))"
         case let Query.DMLDeterminer.delete(from):
             return "DELETE FROM \(from.tableName)"
         }
@@ -123,7 +123,7 @@ struct QueryBuilder {
         case .select:
             return SelectQueryBuilder(components: components)
         case .update:
-            return UpdateQueryBuilder()
+            return UpdateQueryBuilder(components: components)
         case .delete:
             return DeleteQueryBuilder()
         }
@@ -160,11 +160,32 @@ struct QueryBuilder {
     }
 
     struct UpdateQueryBuilder: ConcreteBuilder {
-        mutating func build() {
+        let determiner: Query.DMLDeterminer
+        var sqlWhere: [Query.Where]? = nil
+
+        var result: SQL?
+
+        init(components: SQLComponents) {
+            determiner = components.determiner
+            sqlWhere = components.getClause(kind: Query.Where.self)
         }
 
-        func getSQL() -> SQL {
-            SQL(rawValue: "")
+        mutating func build() {
+            var sqlString: String = ""
+            sqlString += determiner.toSQLString()
+
+            if let unwrappedSqlWhere: [Query.Where] = sqlWhere {
+                sqlString += " WHERE \(unwrappedSqlWhere.map { $0.predicate }.joined(separator: "AND"))"
+            }
+
+            result = SQL(rawValue: sqlString)
+        }
+
+        func getSQL() throws -> SQL {
+            guard let unwrappedSQL = result else {
+                throw QueryBuilder.InternalError.noBuild
+            }
+            return unwrappedSQL
         }
     }
 
