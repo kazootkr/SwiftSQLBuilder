@@ -66,6 +66,10 @@ public protocol SQLClause {
         public init(rawValue: String) {
             self.rawValue = rawValue
         }
+
+        public static func ==(lhs: SQL, rhs: SQL) -> Bool {
+            lhs.rawValue == rhs.rawValue
+        }
     }
 
     @resultBuilder public struct Queryable {
