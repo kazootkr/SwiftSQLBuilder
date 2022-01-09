@@ -8,4 +8,5 @@ SwiftのDSL記法を用いてSQLを記述する
 - [X] UPDATE文の生成
 - [ ] DELETE文の生成
 - [ ] Order By句の指定
-- [ ] DSLで記述できるように
+- [X] DSLで記述できるように
+- [X] DSLによるSQLの記述例

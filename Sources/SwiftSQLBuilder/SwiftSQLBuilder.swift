@@ -2,28 +2,51 @@ public protocol Table {
     var tableName: String { get }
 }
 
+/**
+ SQL文を構成する最小単位
+ */
+public protocol SQLClause {}
+
 @frozen public struct Query {
-    @inlinable public init(@Queryable content: () -> Query) {
+    public let sql: SQL
+    public init(@Queryable content: () -> SQL) {
+        sql = content()
+    }
+
+    public func printDebug() {
+        print("sql string: \(sql.rawValue)")
     }
 
     /**
-     * DMLの種類を決定する役割をもつプロトコル
+     * DMLの種類
      */
-    enum DMLDeterminer {
+    public enum DMLType {
         case select(columns: [String]? = nil, from: Table)
         case update(from: Table, set: [String])
         case delete(from: Table)
     }
 
-    struct Where: SQLClause {
+    public struct Where: SQLClause {
         let predicate: String
-    }
-}
 
-@resultBuilder private struct Queryable {
-    static func buildBlock(_ determiner: Query.DMLDeterminer, _ clauses: SQLClause...) -> SQL {
-        let queryBuilder = QueryBuilder.build(components: SQLComponents(determiner: determiner, clauses: clauses));
-        return queryBuilder.result
+        public init(predicate: String) {
+            self.predicate = predicate
+        }
+    }
+
+    public struct SQL: Equatable {
+        let rawValue: String
+
+        public init(rawValue: String) {
+            self.rawValue = rawValue
+        }
+    }
+
+    @resultBuilder public struct Queryable {
+        public static func buildBlock(_ dmlType: Query.DMLType, _ clauses: SQLClause...) -> SQL {
+            let queryBuilder = QueryBuilder.build(components: SQLComponents(dmlType: dmlType, clauses: clauses));
+            return queryBuilder.result
+        }
     }
 }
 
@@ -33,11 +56,11 @@ public protocol Table {
  * SQL文の構成要素を含むコレクションオブジェクト
  */
 struct SQLComponents {
-    let determiner: Query.DMLDeterminer
+    let dmlType: Query.DMLType
     let clauses: [SQLClause]
 
-    init(determiner: Query.DMLDeterminer, clauses: [SQLClause] = []) {
-        self.determiner = determiner
+    init(dmlType: Query.DMLType, clauses: [SQLClause] = []) {
+        self.dmlType = dmlType
         self.clauses = clauses
     }
 
@@ -60,46 +83,36 @@ struct SQLComponents {
     }
 }
 
-extension Query.DMLDeterminer {
+extension Query.DMLType {
     func toSQLString() -> String {
         switch (self) {
-        case let Query.DMLDeterminer.select(columns, from):
+        case let Query.DMLType.select(columns, from):
             let unwrappedColumns: [String] = columns ?? ["*"]
             return "SELECT \(unwrappedColumns.joined(separator: ", ")) FROM \(from.tableName)"
-        case let Query.DMLDeterminer.update(from, set):
+        case let Query.DMLType.update(from, set):
             return "UPDATE FROM \(from.tableName) SET \(set.joined(separator: ", "))"
-        case let Query.DMLDeterminer.delete(from):
+        case let Query.DMLType.delete(from):
             return "DELETE FROM \(from.tableName)"
         }
     }
 }
 
-/**
- SQL文を構成する最小単位
- */
-protocol SQLClause {
-}
-
-struct SQL {
-    let rawValue: String
-}
-
 struct QueryBuilder {
-    let result: SQL
+    let result: Query.SQL
 
-    private init(result: SQL) {
+    private init(result: Query.SQL) {
         self.result = result
     }
 
     static func build(components: SQLComponents) -> Self {
         var sqlString: String = ""
-        sqlString += components.determiner.toSQLString()
+        sqlString += components.dmlType.toSQLString()
 
         if let unwrappedSqlWhere: [Query.Where] = components.getClause(kind: Query.Where.self) {
             sqlString += " WHERE \(unwrappedSqlWhere.map { $0.predicate }.joined(separator: " AND "))"
         }
 
-        return QueryBuilder(result: SQL(rawValue: sqlString))
+        return QueryBuilder(result: Query.SQL(rawValue: sqlString))
     };
 }
 
