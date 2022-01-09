@@ -97,6 +97,22 @@ extension Query.DMLType {
     }
 }
 
+extension Query.Where {
+    func toSQLString() -> String {
+        predicate
+    }
+}
+
+extension Query.OrderBy {
+    func toSQLString() -> String {
+        if .desc == direction {
+            return "\(columnName) DESC"
+        }
+
+        return columnName
+    }
+}
+
 struct QueryBuilder {
     let result: Query.SQL
 
@@ -109,7 +125,11 @@ struct QueryBuilder {
         sqlString += components.dmlType.toSQLString()
 
         if let unwrappedSqlWhere: [Query.Where] = components.getClause(kind: Query.Where.self) {
-            sqlString += " WHERE \(unwrappedSqlWhere.map { $0.predicate }.joined(separator: " AND "))"
+            sqlString += " WHERE \(unwrappedSqlWhere.map { $0.toSQLString() }.joined(separator: " AND "))"
+        }
+
+        if let unwrappedSqlOrderBy: [Query.OrderBy] = components.getClause(kind: Query.OrderBy.self) {
+            sqlString += " ORDER BY \(unwrappedSqlOrderBy.map { $0.toSQLString() }.joined(separator: ", "))"
         }
 
         return QueryBuilder(result: Query.SQL(rawValue: sqlString))

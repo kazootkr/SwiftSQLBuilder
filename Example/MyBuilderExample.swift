@@ -6,6 +6,7 @@ struct MyBuilderExample {
         Query {
             Query.DMLType.select(from: Photo())
             Query.Where(predicate: "id = 1")
+            Query.OrderBy(columnName: "id", direction: Query.OrderBy.Direction.desc)
         }.printDebug()
     }
 }

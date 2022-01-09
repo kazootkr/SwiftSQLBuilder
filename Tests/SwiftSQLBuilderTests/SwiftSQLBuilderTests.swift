@@ -35,6 +35,17 @@ final class SelectQueryBuilderTest: XCTestCase {
         let builder3 = QueryBuilder.build(components: SQLComponents(dmlType: Query.DMLType.select(columns: ["id", "title"], from: makeBook()), clauses: [Query.Where(predicate: "id = 1"), Query.Where(predicate: "title like 'swift book'")]))
         XCTAssertEqual("SELECT id, title FROM books WHERE id = 1 AND title like 'swift book'", builder3.result.rawValue)
     }
+
+    func testBuild_並び替え付きのSELECT文が生成できる() throws {
+        let builder1 = QueryBuilder.build(components: SQLComponents(dmlType: Query.DMLType.select(from: makeFriend()), clauses: [Query.OrderBy(columnName: "id")]))
+        XCTAssertEqual("SELECT * FROM friends ORDER BY id", builder1.result.rawValue)
+
+        let builder2 = QueryBuilder.build(components: SQLComponents(dmlType: Query.DMLType.select(columns: ["id", "title"], from: makeBook()), clauses: [Query.Where(predicate: "title like 'swift book'"), Query.OrderBy(columnName: "id")]))
+        XCTAssertEqual("SELECT id, title FROM books WHERE title like 'swift book' ORDER BY id", builder2.result.rawValue)
+
+        let builder3 = QueryBuilder.build(components: SQLComponents(dmlType: Query.DMLType.select(columns: ["id", "title"], from: makeBook()), clauses: [Query.Where(predicate: "id = 1"), Query.OrderBy(columnName: "id"), Query.OrderBy(columnName: "name", direction: .desc)]))
+        XCTAssertEqual("SELECT id, title FROM books WHERE id = 1 ORDER BY id, name DESC", builder3.result.rawValue)
+    }
 }
 
 final class UpdateQueryBuilderTest: XCTestCase {
