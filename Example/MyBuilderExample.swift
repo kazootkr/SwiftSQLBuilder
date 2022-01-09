@@ -21,6 +21,12 @@ struct MyBuilderExample {
             Query.DMLType.update(from: Photo.self, set: ["is_deleted = 1"])
             Query.Where(predicate: "id = 1")
         }.printDebug()
+
+        // DELETE文の生成: DELETE FROM photos WHERE id = 1
+        Query {
+            Query.DMLType.delete(from: Photo.self)
+            Query.Where(predicate: "id = 1")
+        }.printDebug()
     }
 }
 

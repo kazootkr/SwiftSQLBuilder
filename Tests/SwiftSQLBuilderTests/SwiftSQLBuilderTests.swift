@@ -91,6 +91,32 @@ final class UpdateQueryBuilderTest: XCTestCase {
     }
 }
 
+final class DeleteQueryBuilderTest: XCTestCase {
+    func testBuild_DELETE文が生成できる() throws {
+        let builder = try! QueryBuilder.build(components: SQLComponents(dmlType: Query.DMLType.delete(from: Friend.self)))
+        XCTAssertEqual("DELETE FROM friends", builder.result.rawValue)
+    }
+
+    func testBuild_UPDATE文を生成_カラム名の指定が誤っている_例外() throws {
+        throw XCTSkip("未実装")
+        XCTAssertThrowsError(try! QueryBuilder.build(components: SQLComponents(dmlType: Query.DMLType.select(columns: ["id", "no_column_name"], from: Friend.self))))
+        XCTAssertThrowsError(try! QueryBuilder.build(components: SQLComponents(dmlType: Query.DMLType.select(columns: ["no_column_name"], from: Book.self))))
+    }
+
+    func testBuild_条件付きのDELETE文が生成できる() throws {
+        let builder = try! QueryBuilder.build(components: SQLComponents(dmlType: Query.DMLType.delete(from: Book.self), clauses: [Query.Where(predicate: "id = 1")]))
+        XCTAssertEqual("DELETE FROM books WHERE id = 1", builder.result.rawValue)
+    }
+
+    func testBuild_DELETE文はORDER_BY句を付与できないこと() throws {
+        XCTAssertThrowsError(try QueryBuilder.build(components: SQLComponents(dmlType: Query.DMLType.delete(from: Friend.self), clauses: [Query.OrderBy(columnName: "id")])));
+    }
+
+    func testBuild_DELETE文はLIMIT句を付与できないこと() throws {
+        XCTAssertThrowsError(try QueryBuilder.build(components: SQLComponents(dmlType: Query.DMLType.delete(from: Friend.self), clauses: [Query.Limit(rowCount: 10)])));
+    }
+}
+
 func makeFriend() -> Friend
 {
     Friend(id: 1, name: "taro", age: 20)

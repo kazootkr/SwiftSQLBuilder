@@ -130,7 +130,8 @@ extension Query.DMLType {
         switch self {
         case .select:
             break;
-        case .update:
+        case .update: fallthrough
+        case .delete:
             switch clause {
             case is Query.Limit.Type: fallthrough
             case is Query.OrderBy.Type:
@@ -138,8 +139,6 @@ extension Query.DMLType {
             default:
                 return true
             }
-        case .delete:
-            break;
         }
 
         return true
