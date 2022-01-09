@@ -4,7 +4,7 @@ import SwiftSQLBuilder
 struct MyBuilderExample {
     static func main() {
         Query {
-            Query.DMLType.select(from: Photo())
+            Query.DMLType.select(from: Photo.self)
             Query.Where(predicate: "id = 1")
             Query.OrderBy(columnName: "id", direction: Query.OrderBy.Direction.desc)
         }.printDebug()
@@ -12,5 +12,7 @@ struct MyBuilderExample {
 }
 
 struct Photo: Table {
-    private(set) var tableName: String = "photos"
+    static func tableName() -> String {
+        "photos"
+    }
 }

@@ -1,14 +1,16 @@
 public protocol Table {
-    var tableName: String { get }
+    static func tableName() -> String
 }
 
 /**
  SQL文を構成する最小単位
  */
-public protocol SQLClause {}
+public protocol SQLClause {
+}
 
 @frozen public struct Query {
     public let sql: SQL
+
     public init(@Queryable content: () -> SQL) {
         sql = content()
     }
@@ -21,9 +23,9 @@ public protocol SQLClause {}
      * DMLの種類
      */
     public enum DMLType {
-        case select(columns: [String]? = nil, from: Table)
-        case update(from: Table, set: [String])
-        case delete(from: Table)
+        case select(columns: [String]? = nil, from: Table.Type)
+        case update(from: Table.Type, set: [String])
+        case delete(from: Table.Type)
     }
 
     public struct Where: SQLClause {
@@ -31,6 +33,21 @@ public protocol SQLClause {}
 
         public init(predicate: String) {
             self.predicate = predicate
+        }
+    }
+
+    public struct OrderBy: SQLClause {
+        let columnName: String
+        let direction: Direction
+
+        public init(columnName: String, direction: Direction = .asc) {
+            self.columnName = columnName
+            self.direction = direction
+        }
+
+        public enum Direction: String {
+            case asc = "ASC"
+            case desc = "DESC"
         }
     }
 
@@ -43,7 +60,7 @@ public protocol SQLClause {}
     }
 
     @resultBuilder public struct Queryable {
-        public static func buildBlock(_ dmlType: Query.DMLType, _ clauses: SQLClause...) -> SQL {
+        public static func buildBlock(_ dmlType: DMLType, _ clauses: SQLClause...) -> SQL {
             let queryBuilder = QueryBuilder.build(components: SQLComponents(dmlType: dmlType, clauses: clauses));
             return queryBuilder.result
         }
@@ -79,6 +96,10 @@ struct SQLComponents {
             }
         }
 
+        guard !result.isEmpty else {
+            return nil
+        }
+
         return result
     }
 }
@@ -88,11 +109,11 @@ extension Query.DMLType {
         switch (self) {
         case let Query.DMLType.select(columns, from):
             let unwrappedColumns: [String] = columns ?? ["*"]
-            return "SELECT \(unwrappedColumns.joined(separator: ", ")) FROM \(from.tableName)"
+            return "SELECT \(unwrappedColumns.joined(separator: ", ")) FROM \(from.tableName())"
         case let Query.DMLType.update(from, set):
-            return "UPDATE FROM \(from.tableName) SET \(set.joined(separator: ", "))"
+            return "UPDATE FROM \(from.tableName()) SET \(set.joined(separator: ", "))"
         case let Query.DMLType.delete(from):
-            return "DELETE FROM \(from.tableName)"
+            return "DELETE FROM \(from.tableName())"
         }
     }
 }
