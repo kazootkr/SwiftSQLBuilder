@@ -51,6 +51,15 @@ public protocol SQLClause {
         }
     }
 
+    public struct Limit: SQLClause {
+        let rowCount: Int
+
+        public init(rowCount: Int) {
+            assert(rowCount > 0)
+            self.rowCount = rowCount
+        }
+    }
+
     public struct SQL: Equatable {
         let rawValue: String
 
@@ -61,7 +70,7 @@ public protocol SQLClause {
 
     @resultBuilder public struct Queryable {
         public static func buildBlock(_ dmlType: DMLType, _ clauses: SQLClause...) -> SQL {
-            let queryBuilder = QueryBuilder.build(components: SQLComponents(dmlType: dmlType, clauses: clauses));
+            let queryBuilder = try! QueryBuilder.build(components: SQLComponents(dmlType: dmlType, clauses: clauses));
             return queryBuilder.result
         }
     }
@@ -106,7 +115,7 @@ struct SQLComponents {
 
 extension Query.DMLType {
     func toSQLString() -> String {
-        switch (self) {
+        switch self {
         case let Query.DMLType.select(columns, from):
             let unwrappedColumns: [String] = columns ?? ["*"]
             return "SELECT \(unwrappedColumns.joined(separator: ", ")) FROM \(from.tableName())"
@@ -115,6 +124,25 @@ extension Query.DMLType {
         case let Query.DMLType.delete(from):
             return "DELETE FROM \(from.tableName())"
         }
+    }
+
+    func isAvailable(clause: SQLClause.Type) -> Bool {
+        switch self {
+        case .select:
+            break;
+        case .update:
+            switch clause {
+            case is Query.Limit.Type: fallthrough
+            case is Query.OrderBy.Type:
+                return false
+            default:
+                return true
+            }
+        case .delete:
+            break;
+        }
+
+        return true
     }
 }
 
@@ -134,6 +162,12 @@ extension Query.OrderBy {
     }
 }
 
+extension Query.Limit {
+    func toSQLString() -> String {
+        "\(rowCount)"
+    }
+}
+
 struct QueryBuilder {
     let result: Query.SQL
 
@@ -141,7 +175,7 @@ struct QueryBuilder {
         self.result = result
     }
 
-    static func build(components: SQLComponents) -> Self {
+    static func build(components: SQLComponents) throws -> Self {
         var sqlString: String = ""
         sqlString += components.dmlType.toSQLString()
 
@@ -150,11 +184,25 @@ struct QueryBuilder {
         }
 
         if let unwrappedSqlOrderBy: [Query.OrderBy] = components.getClause(kind: Query.OrderBy.self) {
+            guard components.dmlType.isAvailable(clause: Query.OrderBy.self) else {
+                throw buildError.noUseClause
+            }
             sqlString += " ORDER BY \(unwrappedSqlOrderBy.map { $0.toSQLString() }.joined(separator: ", "))"
+        }
+
+        if let unwrappedSqlLimit: [Query.Limit] = components.getClause(kind: Query.Limit.self) {
+            guard components.dmlType.isAvailable(clause: Query.Limit.self) else {
+                throw buildError.noUseClause
+            }
+            sqlString += " LIMIT \(unwrappedSqlLimit.map { $0.toSQLString() }.joined(separator: ", "))"
         }
 
         return QueryBuilder(result: Query.SQL(rawValue: sqlString))
     };
+
+    enum buildError: Error {
+        case noUseClause
+    }
 }
 
 
