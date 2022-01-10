@@ -117,13 +117,6 @@ public protocol SQLClause {}
 // MARK: - internal クエリビルダーなどはライブラリの外から見えないように
 
 /**
- * DMLの種類
- */
-protocol HeadClause {
-    func toSQLString() -> String
-}
-
-/**
  * SQL文の構成要素を含むコレクションオブジェクト
  */
 struct SQLComponents {
@@ -156,6 +149,13 @@ struct SQLComponents {
 
         return result
     }
+}
+
+/**
+ * DMLの種類
+ */
+protocol HeadClause {
+    func toSQLString() -> String
 }
 
 extension Query.Select {
@@ -221,6 +221,8 @@ struct QueryBuilder {
         if let unwrappedSqlLimit: [Query.Limit] = components.getClause(kind: Query.Limit.self) {
             sqlString += " LIMIT \(unwrappedSqlLimit.map { $0.toSQLString() }.joined(separator: ", "))"
         }
+
+        sqlString += ";"
 
         return QueryBuilder(result: Query.SQL(rawValue: sqlString))
     }
