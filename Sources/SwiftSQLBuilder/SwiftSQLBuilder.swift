@@ -2,11 +2,16 @@ public protocol Table {
     static func tableName() -> String
 }
 
+public protocol AvailableClauseInSelectStatement: SQLClause {}
+
+public protocol AvailableClauseInUpdateStatement: SQLClause {}
+
+public protocol AvailableClauseInDeleteStatement: SQLClause {}
+
 /**
  SQL文を構成する最小単位
  */
-public protocol SQLClause {
-}
+public protocol SQLClause {}
 
 @frozen public struct Query {
     public let sql: SQL
@@ -15,20 +20,56 @@ public protocol SQLClause {
         sql = content()
     }
 
+    @resultBuilder public struct Queryable {
+        public static func buildBlock(_ headClause: Select, _ clauses: AvailableClauseInSelectStatement...) -> SQL {
+            let queryBuilder = QueryBuilder.build(components: SQLComponents(headClause: headClause, clauses: clauses));
+            return queryBuilder.result
+        }
+
+        public static func buildBlock(_ headClause: Update, _ clauses: AvailableClauseInUpdateStatement...) -> SQL {
+            let queryBuilder = QueryBuilder.build(components: SQLComponents(headClause: headClause, clauses: clauses));
+            return queryBuilder.result
+        }
+
+        public static func buildBlock(_ headClause: Delete, _ clauses: AvailableClauseInDeleteStatement...) -> SQL {
+            let queryBuilder = QueryBuilder.build(components: SQLComponents(headClause: headClause, clauses: clauses));
+            return queryBuilder.result
+        }
+    }
+
     public func printDebug() {
         print("sql string: \(sql.rawValue)")
     }
 
-    /**
-     * DMLの種類
-     */
-    public enum DMLType {
-        case select(columns: [String]? = nil, from: Table.Type)
-        case update(from: Table.Type, set: [String])
-        case delete(from: Table.Type)
+    public struct Select: HeadClause {
+        let columns: [String]?
+        let from: Table.Type
+
+        public init(columns: [String]? = nil, from: Table.Type) {
+            self.columns = columns
+            self.from = from
+        }
     }
 
-    public struct Where: SQLClause {
+    public struct Update: HeadClause {
+        let from: Table.Type
+        let set: [String]
+
+        public init(from: Table.Type, set: [String]) {
+            self.from = from
+            self.set = set
+        }
+    }
+
+    public struct Delete: HeadClause {
+        let from: Table.Type
+
+        public init(from: Table.Type) {
+            self.from = from
+        }
+    }
+
+    public struct Where: AvailableClauseInSelectStatement, AvailableClauseInUpdateStatement, AvailableClauseInDeleteStatement {
         let predicate: String
 
         public init(predicate: String) {
@@ -36,7 +77,7 @@ public protocol SQLClause {
         }
     }
 
-    public struct OrderBy: SQLClause {
+    public struct OrderBy: AvailableClauseInSelectStatement {
         let columnName: String
         let direction: Direction
 
@@ -51,7 +92,7 @@ public protocol SQLClause {
         }
     }
 
-    public struct Limit: SQLClause {
+    public struct Limit: AvailableClauseInSelectStatement {
         let rowCount: Int
 
         public init(rowCount: Int) {
@@ -71,26 +112,26 @@ public protocol SQLClause {
             lhs.rawValue == rhs.rawValue
         }
     }
-
-    @resultBuilder public struct Queryable {
-        public static func buildBlock(_ dmlType: DMLType, _ clauses: SQLClause...) -> SQL {
-            let queryBuilder = try! QueryBuilder.build(components: SQLComponents(dmlType: dmlType, clauses: clauses));
-            return queryBuilder.result
-        }
-    }
 }
 
-// MARK: - private クエリビルダー自体は外から見えないように
+// MARK: - internal クエリビルダーなどはライブラリの外から見えないように
+
+/**
+ * DMLの種類
+ */
+protocol HeadClause {
+    func toSQLString() -> String
+}
 
 /**
  * SQL文の構成要素を含むコレクションオブジェクト
  */
 struct SQLComponents {
-    let dmlType: Query.DMLType
+    let headClause: HeadClause
     let clauses: [SQLClause]
 
-    init(dmlType: Query.DMLType, clauses: [SQLClause] = []) {
-        self.dmlType = dmlType
+    init(headClause: HeadClause, clauses: [SQLClause] = []) {
+        self.headClause = headClause
         self.clauses = clauses
     }
 
@@ -117,35 +158,22 @@ struct SQLComponents {
     }
 }
 
-extension Query.DMLType {
+extension Query.Select {
     func toSQLString() -> String {
-        switch self {
-        case let Query.DMLType.select(columns, from):
-            let unwrappedColumns: [String] = columns ?? ["*"]
-            return "SELECT \(unwrappedColumns.joined(separator: ", ")) FROM \(from.tableName())"
-        case let Query.DMLType.update(from, set):
-            return "UPDATE FROM \(from.tableName()) SET \(set.joined(separator: ", "))"
-        case let Query.DMLType.delete(from):
-            return "DELETE FROM \(from.tableName())"
-        }
+        let unwrappedColumns: [String] = columns ?? ["*"]
+        return "SELECT \(unwrappedColumns.joined(separator: ", ")) FROM \(from.tableName())"
     }
+}
 
-    func isAvailable(clause: SQLClause.Type) -> Bool {
-        switch self {
-        case .select:
-            break;
-        case .update: fallthrough
-        case .delete:
-            switch clause {
-            case is Query.Limit.Type: fallthrough
-            case is Query.OrderBy.Type:
-                return false
-            default:
-                return true
-            }
-        }
+extension Query.Update {
+    func toSQLString() -> String {
+        "UPDATE FROM \(from.tableName()) SET \(set.joined(separator: ", "))"
+    }
+}
 
-        return true
+extension Query.Delete {
+    func toSQLString() -> String {
+        "DELETE FROM \(from.tableName())"
     }
 }
 
@@ -178,35 +206,22 @@ struct QueryBuilder {
         self.result = result
     }
 
-    static func build(components: SQLComponents) throws -> Self {
+    static func build(components: SQLComponents) -> Self {
         var sqlString: String = ""
-        sqlString += components.dmlType.toSQLString()
+        sqlString += components.headClause.toSQLString()
 
         if let unwrappedSqlWhere: [Query.Where] = components.getClause(kind: Query.Where.self) {
             sqlString += " WHERE \(unwrappedSqlWhere.map { $0.toSQLString() }.joined(separator: " AND "))"
         }
 
         if let unwrappedSqlOrderBy: [Query.OrderBy] = components.getClause(kind: Query.OrderBy.self) {
-            guard components.dmlType.isAvailable(clause: Query.OrderBy.self) else {
-                throw buildError.noUseClause
-            }
             sqlString += " ORDER BY \(unwrappedSqlOrderBy.map { $0.toSQLString() }.joined(separator: ", "))"
         }
 
         if let unwrappedSqlLimit: [Query.Limit] = components.getClause(kind: Query.Limit.self) {
-            guard components.dmlType.isAvailable(clause: Query.Limit.self) else {
-                throw buildError.noUseClause
-            }
             sqlString += " LIMIT \(unwrappedSqlLimit.map { $0.toSQLString() }.joined(separator: ", "))"
         }
 
         return QueryBuilder(result: Query.SQL(rawValue: sqlString))
-    };
-
-    enum buildError: Error {
-        case noUseClause
     }
 }
-
-
-
